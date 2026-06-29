@@ -761,7 +761,7 @@ function SectorCell({ s, label, sig, selected, onClick }) {
 
 function MarketSector() {
   const { phase, setPhase, boardMarket, setBoardMarket, weighting, setWeighting,
-          sigs, updateSig, activeKey, setActiveKey } = useContext(Cockpit);
+          sigs, updateSig, activeKey, setActiveKey, savedAt, resetBoard } = useContext(Cockpit);
   const list = boardMarket === "US" ? US_SECTORS : KR_SECTORS;
   const labelOf = (s) => boardMarket === "US" ? (weighting === "ew" && s.ew ? s.ew : s.k) : s.k.replace("KR_", "");
   const sigOf = (k) => sigs[k] || DEFAULT_SIG;
@@ -778,6 +778,18 @@ function MarketSector() {
 
   return (
     <div>
+      {/* 저장 상태 바 */}
+      <div className="card" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px" }}>
+        <span style={{ fontSize: 13 }}>💾</span>
+        <span style={{ fontSize: 12, color: "var(--text2)" }}>
+          마지막 저장 <b className="mono" style={{ color: "var(--text)" }}>{fmtSaved(savedAt)}</b>
+          {savedAt && <span className="dim" style={{ marginLeft: 6 }}>({agoLabel(savedAt)})</span>}
+        </span>
+        <span className="dim" style={{ fontSize: 10.5, marginLeft: 4 }}>· 자동 저장됨</span>
+        <button className="phasepill" style={{ marginLeft: "auto" }}
+          onClick={() => { if (confirm("보드 입력(국면·섹터 시그널)을 초기화할까요?")) resetBoard(); }}>초기화</button>
+      </div>
+
       {/* Market phase */}
       <div className="card">
         <h2><span className="num">F2</span> 시장 국면 <span className="dim" style={{ textTransform: "none", fontWeight: 400 }}>· Minervini MDM</span></h2>
@@ -1149,16 +1161,55 @@ function Reference() {
 /* ───────────────────────── App shell ───────────────────────── */
 const PHASES = ["Confirmed Uptrend", "Uptrend Under Pressure", "Rally Attempt", "Downtrend"];
 
+/* localStorage 영속화 — Market 탭 입력(국면·섹터 시그널 등) 유지 + 마지막 저장 시각 기록 */
+const STORAGE_KEY = "tf-cockpit-v2";
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function fmtSaved(iso) {
+  if (!iso) return "저장 안 됨";
+  const d = new Date(iso); const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function agoLabel(iso) {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000), hr = Math.floor(min / 60), day = Math.floor(hr / 24);
+  if (day >= 1) return day + "일 전";
+  if (hr >= 1) return hr + "시간 전";
+  if (min >= 1) return min + "분 전";
+  return "방금 전";
+}
+
 function App() {
+  const saved = useMemo(loadSaved, []);
+  const g = (k, d) => (saved[k] !== undefined && saved[k] !== null ? saved[k] : d);
+
   const [active, setActive] = useState("scorer");
-  const [phase, setPhase] = useState("Confirmed Uptrend");
+  const [phase, setPhase] = useState(g("phase", "Confirmed Uptrend"));
   const [grade, setGrade] = useState("C");
-  // sector board state (lifted so it persists across tabs)
-  const [boardMarket, setBoardMarket] = useState("US");
-  const [weighting, setWeighting] = useState("cap");
-  const [sigs, setSigs] = useState({});
-  const [activeKey, setActiveKey] = useState(null);
+  // sector board state (lifted so it persists across tabs · localStorage 영속화)
+  const [boardMarket, setBoardMarket] = useState(g("boardMarket", "US"));
+  const [weighting, setWeighting] = useState(g("weighting", "cap"));
+  const [sigs, setSigs] = useState(g("sigs", {}));
+  const [activeKey, setActiveKey] = useState(g("activeKey", null));
+  const [savedAt, setSavedAt] = useState(g("savedAt", null));
   const updateSig = (k, p) => setSigs(prev => ({ ...prev, [k]: { ...DEFAULT_SIG, ...prev[k], ...p } }));
+
+  // 자동 저장: Market 탭 입력이 바뀔 때마다 localStorage에 기록 + 저장 시각 갱신 (최초 로드 시는 건너뜀)
+  const firstRun = React.useRef(true);
+  React.useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const now = new Date().toISOString();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase, boardMarket, weighting, sigs, activeKey, savedAt: now })); } catch (e) {}
+    setSavedAt(now);
+  }, [phase, boardMarket, weighting, sigs, activeKey]);
+
+  const resetBoard = () => {
+    setSigs({}); setActiveKey(null);
+    setPhase("Confirmed Uptrend"); setBoardMarket("US"); setWeighting("cap");
+  };
   // shared trade plan (entry/stop/atr) — used by Scorer 3-Stop & Position Sizer
   const [plan, setPlan] = useState({ entry: "", stop: "", atr: "" });
   const updatePlan = (p) => setPlan(prev => ({ ...prev, ...p }));
@@ -1183,7 +1234,7 @@ function App() {
   return (
     <Cockpit.Provider value={{ phase, setPhase, grade, setGrade,
       boardMarket, setBoardMarket, weighting, setWeighting, sigs, updateSig, activeKey, setActiveKey, activeSector,
-      plan, updatePlan }}>
+      plan, updatePlan, savedAt, resetBoard }}>
       <div className="container">
         <div className="topbar">
           <div className="brand">TF COCKPIT<span className="dot">·</span>v2<br/><small>JEFF SUN · CFTe</small></div>
