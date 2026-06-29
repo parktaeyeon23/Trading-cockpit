@@ -446,7 +446,7 @@ function ThreeStop({ price }) {
     <div className="card" style={{ borderColor: "var(--green)" }}>
       <h2><span className="num">F1-4</span> 3-Stop Strategy
         <a className="link" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600 }}
-           href="jeff_sun_complete_guide_v2.html#6">가이드 Ch6 ▸</a></h2>
+           href="jeff_sun_complete_guide_v2.html#c6">가이드 Ch6 ▸</a></h2>
       <p className="dim" style={{ fontSize: 11.5, marginTop: -4, marginBottom: 10 }}>셋업 통과 시 자동 노출 · 진입가/손절가로 R 구조 계산</p>
 
       <div className="grid3" style={{ marginBottom: 4 }}>
@@ -1134,13 +1134,13 @@ function Reference() {
         가이드 v2(<span className="mono">jeff_sun_complete_guide_v2.html</span>) 챕터 딥링크. 파일을 같은 폴더에 두면 연결됩니다.
       </p>
       <ul className="miss" style={{ marginTop: 0 }}>
-        {[["Ch2","인디케이터·Top100 통계 (ADR%/ATR%/RVOL)"],
-          ["Ch4~5","Screening→Focus List, Top-Down (필수·트리거)"],
-          ["Ch6","15 하드룰 · 3-Stop · −0.67R"],
-          ["Ch7","황금 규칙 (8~10×ATR%, ORL 매도)"],
-          ["Ch16","FAQ · 섹터 과매수 (ATR% 이격도)"]].map(([c, t]) =>
+        {[["Ch2","인디케이터·Top100 통계 (ADR%/ATR%/RVOL)","c2"],
+          ["Ch4~5","Screening→Focus List, Top-Down (필수·트리거)","c4"],
+          ["Ch6","15 하드룰 · 3-Stop · −0.67R","c6"],
+          ["Ch7","황금 규칙 (8~10×ATR%, ORL 매도)","c7"],
+          ["Ch16","FAQ · 섹터 과매수 (ATR% 이격도)","c12"]].map(([c, t, a]) =>
           <li key={c}><span className="mk" style={{ color: "var(--blue)" }}>#</span>
-            <span><a className="link" href={"jeff_sun_complete_guide_v2.html#" + c.replace(/[^0-9]/g, "")}>{c}</a> — {t}</span></li>)}
+            <span><a className="link" href={"jeff_sun_complete_guide_v2.html#" + a}>{c}</a> — {t}</span></li>)}
       </ul>
     </div>
   );
