@@ -761,7 +761,14 @@ function SectorCell({ s, label, sig, selected, onClick }) {
 
 function MarketSector() {
   const { phase, setPhase, boardMarket, setBoardMarket, weighting, setWeighting,
-          sigs, updateSig, activeKey, setActiveKey, savedAt, resetBoard } = useContext(Cockpit);
+          sigs, updateSig, activeKey, setActiveKey, savedAt, resetBoard, syncStatus, pullCloud } = useContext(Cockpit);
+  const SYNC_UI = {
+    idle:    { t: "대기", c: "var(--text3)" },
+    loading: { t: "동기화 확인 중…", c: "var(--amber)" },
+    saving:  { t: "저장 중…", c: "var(--amber)" },
+    synced:  { t: "✓ 클라우드 동기화됨", c: "var(--green)" },
+    offline: { t: "오프라인 (로컬 저장)", c: "var(--red)" },
+  };
   const list = boardMarket === "US" ? US_SECTORS : KR_SECTORS;
   const labelOf = (s) => boardMarket === "US" ? (weighting === "ew" && s.ew ? s.ew : s.k) : s.k.replace("KR_", "");
   const sigOf = (k) => sigs[k] || DEFAULT_SIG;
@@ -778,16 +785,20 @@ function MarketSector() {
 
   return (
     <div>
-      {/* 저장 상태 바 */}
-      <div className="card" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px" }}>
-        <span style={{ fontSize: 13 }}>💾</span>
-        <span style={{ fontSize: 12, color: "var(--text2)" }}>
-          마지막 저장 <b className="mono" style={{ color: "var(--text)" }}>{fmtSaved(savedAt)}</b>
-          {savedAt && <span className="dim" style={{ marginLeft: 6 }}>({agoLabel(savedAt)})</span>}
-        </span>
-        <span className="dim" style={{ fontSize: 10.5, marginLeft: 4 }}>· 자동 저장됨</span>
-        <button className="phasepill" style={{ marginLeft: "auto" }}
-          onClick={() => { if (confirm("보드 입력(국면·섹터 시그널)을 초기화할까요?")) resetBoard(); }}>초기화</button>
+      {/* 저장/동기화 상태 바 */}
+      <div className="card" style={{ padding: "10px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13 }}>☁️</span>
+          <span style={{ fontSize: 12, color: "var(--text2)" }}>
+            마지막 저장 <b className="mono" style={{ color: "var(--text)" }}>{fmtSaved(savedAt)}</b>
+            {savedAt && <span className="dim" style={{ marginLeft: 6 }}>({agoLabel(savedAt)})</span>}
+          </span>
+          <button className="phasepill" style={{ marginLeft: "auto" }} onClick={pullCloud} title="다른 기기에서 저장한 최신본 가져오기">↻ 동기화</button>
+          <button className="phasepill" onClick={() => { if (confirm("보드 입력(국면·섹터 시그널)을 초기화할까요?")) resetBoard(); }}>초기화</button>
+        </div>
+        <div style={{ fontSize: 11, marginTop: 6, color: (SYNC_UI[syncStatus] || SYNC_UI.idle).c }}>
+          {(SYNC_UI[syncStatus] || SYNC_UI.idle).t} · 모든 기기 공유
+        </div>
       </div>
 
       {/* Market phase */}
@@ -1161,7 +1172,52 @@ function Reference() {
 /* ───────────────────────── App shell ───────────────────────── */
 const PHASES = ["Confirmed Uptrend", "Uptrend Under Pressure", "Rally Attempt", "Downtrend"];
 
-/* localStorage 영속화 — Market 탭 입력(국면·섹터 시그널 등) 유지 + 마지막 저장 시각 기록 */
+/* ── 클라우드 동기화 (기존 거래일지 GAS 재사용) — 크로스 디바이스 공유 ──
+   ⚠ 공개 페이지에 노출됨(거래일지와 동일 수준). 민감 데이터 금지.
+   서버측에 saveCockpit/loadCockpit 액션을 추가하고 GAS를 재배포해야 활성화됨. */
+const SYNC_URL = "https://script.google.com/macros/s/AKfycbx-T4S5g2MtHeuan2wsGkbpCoVCBfc88Mf_uEAgEw0lv35HAfTQQViXQJm_w2LKEDjK/exec";
+const SYNC_SECRET = "alpha-desk-2026-mypw";
+
+function cloudSaveBoard(payload, onDone) {
+  try {
+    let iframe = document.getElementById("cockpit-sync-iframe");
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "cockpit-sync-iframe"; iframe.name = "cockpit-sync-iframe";
+      iframe.style.display = "none"; document.body.appendChild(iframe);
+    }
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = SYNC_URL + "?secret=" + encodeURIComponent(SYNC_SECRET);
+    form.target = "cockpit-sync-iframe";
+    const add = (n, v) => { const i = document.createElement("input"); i.type = "hidden"; i.name = n; i.value = v; form.appendChild(i); };
+    add("action", "saveCockpit");
+    add("cockpit", JSON.stringify(payload));
+    document.body.appendChild(form);
+    let done = false; const finish = (ok) => { if (done) return; done = true; try { document.body.removeChild(form); } catch (e) {} if (onDone) onDone(ok); };
+    const handler = () => { iframe.removeEventListener("load", handler); finish(true); };
+    iframe.addEventListener("load", handler);
+    form.submit();
+    setTimeout(() => finish(true), 5000);
+  } catch (e) { if (onDone) onDone(false); }
+}
+
+function cloudLoadBoard(onData) {
+  try {
+    const cb = "cockpitLoadCb_" + Date.now();
+    let settled = false; const settle = (r) => { if (settled) return; settled = true; try { delete window[cb]; } catch (e) {} const s = document.getElementById("cockpit-load-script"); if (s) s.remove(); onData(r); };
+    window[cb] = (resp) => settle(resp);
+    const old = document.getElementById("cockpit-load-script"); if (old) old.remove();
+    const script = document.createElement("script");
+    script.id = "cockpit-load-script";
+    script.src = SYNC_URL + "?action=loadCockpit&callback=" + cb + "&t=" + Date.now();
+    script.onerror = () => settle(null);
+    document.body.appendChild(script);
+    setTimeout(() => settle(null), 9000);
+  } catch (e) { onData(null); }
+}
+
+/* localStorage 영속화 — Market 탭 입력(국면·섹터 시그널 등) 유지 + 마지막 저장 시각 기록 (오프라인 캐시) */
 const STORAGE_KEY = "tf-cockpit-v2";
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
@@ -1195,16 +1251,64 @@ function App() {
   const [sigs, setSigs] = useState(g("sigs", {}));
   const [activeKey, setActiveKey] = useState(g("activeKey", null));
   const [savedAt, setSavedAt] = useState(g("savedAt", null));
+  const [syncStatus, setSyncStatus] = useState("idle"); // idle|loading|saving|synced|offline
   const updateSig = (k, p) => setSigs(prev => ({ ...prev, [k]: { ...DEFAULT_SIG, ...prev[k], ...p } }));
 
-  // 자동 저장: Market 탭 입력이 바뀔 때마다 localStorage에 기록 + 저장 시각 갱신 (최초 로드 시는 건너뜀)
   const firstRun = React.useRef(true);
+  const skipRemote = React.useRef(false);
+  const saveTimer = React.useRef(null);
+
+  // 원격(클라우드) 데이터를 상태에 반영 — push 루프 방지를 위해 skipRemote 가드
+  const applyRemote = (d, cloudAt) => {
+    skipRemote.current = true;
+    if (d.phase) setPhase(d.phase);
+    if (d.boardMarket) setBoardMarket(d.boardMarket);
+    if (d.weighting) setWeighting(d.weighting);
+    setSigs(d.sigs || {});
+    setActiveKey(d.activeKey != null ? d.activeKey : null);
+    setSavedAt(cloudAt || null);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase: d.phase, boardMarket: d.boardMarket, weighting: d.weighting, sigs: d.sigs || {}, activeKey: d.activeKey, savedAt: cloudAt })); } catch (e) {}
+    setSyncStatus("synced");
+  };
+
+  // 자동 저장: 변경 시 localStorage(오프라인 캐시) + 디바운스 클라우드 푸시 + 저장 시각 갱신
   React.useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
+    if (skipRemote.current) { skipRemote.current = false; return; }
     const now = new Date().toISOString();
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase, boardMarket, weighting, sigs, activeKey, savedAt: now })); } catch (e) {}
+    const payload = { phase, boardMarket, weighting, sigs, activeKey, savedAt: now };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     setSavedAt(now);
+    setSyncStatus("saving");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => cloudSaveBoard(payload, (ok) => setSyncStatus(ok ? "synced" : "offline")), 1200);
   }, [phase, boardMarket, weighting, sigs, activeKey]);
+
+  // 마운트 시 클라우드 최신본 가져와 병합 (타임스탬프 최신 우선)
+  React.useEffect(() => {
+    setSyncStatus("loading");
+    const localAt = saved.savedAt || null;
+    cloudLoadBoard((resp) => {
+      if (!resp || !resp.success) { setSyncStatus("offline"); return; }
+      const cloudAt = resp.updatedAt || null;
+      if (resp.data && (!localAt || (cloudAt && cloudAt > localAt))) {
+        applyRemote(resp.data, cloudAt);            // 클라우드 최신 → 반영
+      } else if (localAt && (!cloudAt || localAt > cloudAt)) {
+        cloudSaveBoard({ phase, boardMarket, weighting, sigs, activeKey, savedAt: localAt }, (ok) => setSyncStatus(ok ? "synced" : "offline")); // 로컬 최신 → 푸시
+      } else {
+        setSyncStatus("synced");
+      }
+    });
+  }, []);
+
+  // 수동 동기화: 클라우드 최신본 강제로 가져오기
+  const pullCloud = () => {
+    setSyncStatus("loading");
+    cloudLoadBoard((resp) => {
+      if (resp && resp.success && resp.data) applyRemote(resp.data, resp.updatedAt || null);
+      else setSyncStatus(resp ? "synced" : "offline");
+    });
+  };
 
   const resetBoard = () => {
     setSigs({}); setActiveKey(null);
@@ -1234,7 +1338,7 @@ function App() {
   return (
     <Cockpit.Provider value={{ phase, setPhase, grade, setGrade,
       boardMarket, setBoardMarket, weighting, setWeighting, sigs, updateSig, activeKey, setActiveKey, activeSector,
-      plan, updatePlan, savedAt, resetBoard }}>
+      plan, updatePlan, savedAt, resetBoard, syncStatus, pullCloud }}>
       <div className="container">
         <div className="topbar">
           <div className="brand">TF COCKPIT<span className="dot">·</span>v2<br/><small>JEFF SUN · CFTe</small></div>
