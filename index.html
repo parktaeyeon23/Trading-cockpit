@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0c">
+<title>Trend Following Cockpit v2</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>
+  // Force classic JSX runtime (React.createElement) — automatic runtime emits
+  // bare `import` statements that fail in a non-module <script>.
+  Babel.registerPreset('classic-react', {
+    presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]]
+  });
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #0a0a0c; --bg2: #121218; --bg3: #1b1b24; --bg4: #24242f;
+    --text: #e6e6ee; --text2: #9a9aae; --text3: #62626f;
+    --amber: #ffb000; --amber-bg: rgba(255,176,0,0.12);
+    --green: #00d68f; --green-bg: rgba(0,214,143,0.12);
+    --red: #ff4d4d; --red-bg: rgba(255,77,77,0.12);
+    --blue: #4a8cff; --blue-bg: rgba(74,140,255,0.12);
+    --border: rgba(255,255,255,0.08);
+    --mono: 'SFMono-Regular', ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
+    --radius: 10px;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    padding: env(safe-area-inset-top) 0 calc(64px + env(safe-area-inset-bottom)) 0;
+    font-size: 14px; line-height: 1.45;
+  }
+  .container { max-width: 640px; margin: 0 auto; padding: 14px 14px 0; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 2px 12px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+  }
+  .brand { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+  .brand .dot { color: var(--amber); }
+  .brand small { color: var(--text3); font-weight: 500; font-size: 11px; letter-spacing: .12em; }
+  .phasepill {
+    font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg2); cursor: pointer; color: var(--text2);
+  }
+  .phasepill b { color: var(--text); }
+
+  /* tabs */
+  .tabs {
+    position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg2);
+    border-top: 1px solid var(--border); display: flex; z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tab {
+    flex: 1; padding: 9px 4px 8px; text-align: center; font-size: 10.5px; letter-spacing: .02em;
+    color: var(--text3); background: none; border: none; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; font-weight: 600;
+  }
+  .tab.active { color: var(--amber); }
+  .tab .ic { font-size: 17px; line-height: 1; }
+
+  /* generic */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .card h2 { font-size: 13px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text2); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .num { font-family: var(--mono); color: var(--amber); }
+  .muted { color: var(--text2); }
+  .dim { color: var(--text3); }
+  .mono { font-family: var(--mono); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+  label.field { display: block; margin-bottom: 10px; }
+  label.field .lab { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+  input.inp, select.inp {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-family: var(--mono); font-size: 14px;
+  }
+  input.inp:focus, select.inp:focus { outline: none; border-color: var(--amber); }
+  select.inp { font-family: inherit; }
+
+  .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: none; border: none; color: var(--text2); padding: 6px 12px; font-size: 12px; cursor: pointer; font-weight: 600; }
+  .seg button.on { background: var(--amber-bg); color: var(--amber); }
+
+  .check { display: flex; align-items: flex-start; gap: 9px; padding: 8px 6px; border-radius: 8px; cursor: pointer; }
+  .check:hover { background: var(--bg3); }
+  .check .box {
+    width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--text3);
+    flex: 0 0 18px; margin-top: 1px; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--bg); font-weight: 800;
+  }
+  .check.on .box { background: var(--green); border-color: var(--green); }
+  .check.on.req .box { background: var(--amber); border-color: var(--amber); }
+  .check .txt { font-size: 13px; }
+  .check .src { font-size: 10.5px; color: var(--text3); margin-top: 1px; }
+  .check .auto { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 5px; margin-left: auto; flex: 0 0 auto; }
+  .auto.pass { background: var(--green-bg); color: var(--green); }
+  .auto.fail { background: var(--red-bg); color: var(--red); }
+  .auto.warn { background: var(--amber-bg); color: var(--amber); }
+  .auto.na { background: var(--bg3); color: var(--text3); }
+
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); }
+  .chip.g { background: var(--green-bg); color: var(--green); border-color: transparent; }
+  .chip.r { background: var(--red-bg); color: var(--red); border-color: transparent; }
+  .chip.a { background: var(--amber-bg); color: var(--amber); border-color: transparent; }
+  .chip.b { background: var(--blue-bg); color: var(--blue); border-color: transparent; }
+
+  .gradewrap { display: flex; align-items: center; gap: 16px; }
+  .badge {
+    font-family: var(--mono); font-weight: 800; font-size: 40px; line-height: 1;
+    width: 96px; height: 96px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid; letter-spacing: -.02em;
+  }
+  .badge.Ap, .badge.A { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+  .badge.Bp, .badge.B { color: var(--amber); border-color: var(--amber); background: var(--amber-bg); }
+  .badge.C { color: var(--red); border-color: var(--red); background: var(--red-bg); }
+  .gradeinfo { flex: 1; }
+  .gradeinfo .lead { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+
+  .why { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .miss { list-style: none; margin-top: 8px; }
+  .miss li { display: flex; gap: 8px; padding: 5px 0; font-size: 12.5px; border-top: 1px solid var(--border); }
+  .miss li .mk { color: var(--red); font-weight: 800; flex: 0 0 auto; }
+  .miss li .mk.w { color: var(--amber); }
+
+  .meter { height: 7px; background: var(--bg3); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .meter > span { display: block; height: 100%; border-radius: 999px; background: var(--amber); }
+
+  /* sector board */
+  .phasegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .phasebtn { background: var(--bg); border: 1px solid var(--border); color: var(--text2); padding: 9px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1.3; text-align: left; }
+  .phasebtn.on { border-color: var(--amber); color: var(--amber); background: var(--amber-bg); }
+  .phasebtn small { display: block; color: var(--text3); font-weight: 500; font-size: 10px; }
+  .phasebtn.on small { color: var(--amber); opacity: .8; }
+  .heatgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .cell { position: relative; border: 1.5px solid var(--border); border-radius: 9px; padding: 8px 7px 7px; cursor: pointer; background: var(--bg3); text-align: left; min-height: 64px; }
+  .cell.sel { box-shadow: 0 0 0 2px var(--amber); }
+  .cell .sym { font-family: var(--mono); font-weight: 700; font-size: 13px; }
+  .cell .nm { font-size: 10px; color: var(--text2); }
+  .cell .rsbadge { position: absolute; top: 6px; right: 6px; font-family: var(--mono); font-size: 10px; font-weight: 800; width: 16px; height: 16px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--bg); }
+  .cell .heatbar { height: 4px; border-radius: 999px; background: var(--bg); margin-top: 7px; overflow: hidden; position: relative; }
+  .cell .heatbar > span { display: block; height: 100%; border-radius: 999px; }
+  .cell .heatbar .dl { position: absolute; top: -1px; bottom: -1px; width: 1px; background: var(--text2); }
+  .cell .oh { position: absolute; bottom: 5px; right: 6px; font-size: 11px; }
+  /* alignment lamps (F2-3) */
+  .lamps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: stretch; }
+  .lamp { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 6px; text-align: center; position: relative; }
+  .lampdot { width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; }
+  .lamp .lt { font-size: 12px; font-weight: 700; }
+  .lamp .ls { font-size: 10px; color: var(--text3); margin-top: 2px; line-height: 1.3; }
+  .lampsep { display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 18px; }
+  .lampg { background: var(--green-bg); color: var(--green); border: 2px solid var(--green); }
+  .lampa { background: var(--amber-bg); color: var(--amber); border: 2px solid var(--amber); }
+  .lampr { background: var(--red-bg); color: var(--red); border: 2px solid var(--red); }
+  .lampn { background: var(--bg3); color: var(--text3); border: 2px solid var(--text3); }
+  .placeholder { text-align: center; padding: 40px 20px; color: var(--text3); }
+  .placeholder .big { font-size: 32px; margin-bottom: 12px; }
+  .placeholder .ms { font-family: var(--mono); color: var(--amber); font-size: 12px; margin-top: 10px; }
+
+  .tip { position: relative; cursor: help; border-bottom: 1px dotted var(--text3); }
+  details.acc { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px; }
+  details.acc summary { cursor: pointer; font-size: 12px; color: var(--text2); list-style: none; }
+  details.acc summary::-webkit-details-marker { display: none; }
+  .bench { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+  a.link { color: var(--blue); text-decoration: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="classic-react">
+const { useState, useMemo, createContext, useContext } = React;
+
+/* ───────────────────────── Jeff Sun rule sources (부록 A) ───────────────────────── */
+const SRC = {
+  vwap:    "Ch4~5 · 주가>VWAP (DT M5 / Swing M5+D1)",
+  earn:    "Ch6 · 어닝 룰 (2주 내 실적 발표 금지)",
+  trend:   "Ch4~5 · M5 추세선 이격 (clear of trendlines)",
+  clean:   "Ch4~5 · D1 차트 품질 (갭·변동성 캔들 없는 깨끗한 추세)",
+  index:   "Ch4~5 · 지수(SPY) 추세 정렬",
+  ema9:    "Ch2 · 가격은 D9EMA의 8% 이내",
+  adr:     "Ch2 · ADR% > 3.5% (변동성 충분)",
+  ext:     "Ch2 · 200-MA에서 3×ADR% 이상 이격 시 경고",
+  comp:    "Ch4~5 · D1 Compression Break (거래량 동반 좁은 레인지 돌파)",
+  ath:     "Ch4~5 · ATH (D1 사상 최고가)",
+  event:   "Ch4~5 · D1 Event (알고라인→수평 S/R→SMA 돌파)",
+  ha:      "Ch4~5 · HA Continuation (3번째 연속 HA FB 캔들)",
+  vcp:     "보조 · VCP / Cup&Handle 패턴",
+  rvol:    "Ch2 · RVOL — Volume Buzz +20% 최소, +180% 가산",
+  adrdist: "Ch2 · Top100 winner 통계: ADR% 2%+ 96%, 3%+ 89%",
+  rs:      "Ch4~5 · 섹터 대비 RS 우위 (D1 5일 RS) — F2 연동",
+  void:    "Ch2 · D1 Void > 1%",
+  base:    "Ch2 · 타이트 베이스 + 거래량 수축 후 돌파 급증",
+};
+
+/* ───────────────────────── Scoring engine (F1) ───────────────────────── */
+// pure function — testable, interpretable. returns full breakdown.
+function scoreSetup(s, env = {}) {
+  const phase = env.phase || "Confirmed Uptrend";
+  const linked = env.linked || null; // 연동 섹터 시그널 {trend,rs,heat} 또는 null
+  const num = (v) => (v === "" || v == null || isNaN(parseFloat(v)) ? null : parseFloat(v));
+  const price = num(s.price), vwap = num(s.vwap), ema9 = num(s.ema9),
+        adr = num(s.adr), ma200 = num(s.ma200), rvol = num(s.rvol), voidPct = num(s.voidPct);
+
+  // ── Mandatory (F1-1): every item must pass; any fail caps grade at B
+  const mand = [];
+  const ema9Dist = price != null && ema9 != null ? Math.abs(price - ema9) / ema9 * 100 : null;
+  const extPct = price != null && ma200 != null ? (price - ma200) / ma200 * 100 : null;
+  const extLimit = adr != null ? 3 * adr : null;
+
+  mand.push({ key: "vwap", label: "주가 > VWAP", src: SRC.vwap,
+    state: price != null && vwap != null ? (price > vwap ? "pass" : "fail") : (s.m_vwap ? "pass" : "na"),
+    auto: price != null && vwap != null ? (price > vwap ? "Δ+" + (price - vwap).toFixed(2) : "Δ" + (price - vwap).toFixed(2)) : null });
+  mand.push({ key: "earn", label: "2주 이내 실적 발표 없음", src: SRC.earn, state: s.m_earn ? "pass" : "fail" });
+  mand.push({ key: "trend", label: "M5 추세선에서 이격", src: SRC.trend, state: s.m_trend ? "pass" : "fail" });
+  mand.push({ key: "clean", label: "D1 차트 품질 양호 (갭·변동성 無)", src: SRC.clean, state: s.m_clean ? "pass" : "fail" });
+  mand.push({ key: "index", label: "지수(SPY) 추세에 정렬", src: SRC.index, state: s.m_index ? "pass" : "fail" });
+  mand.push({ key: "ema9", label: "가격 D9EMA의 8% 이내", src: SRC.ema9,
+    state: ema9Dist != null ? (ema9Dist <= 8 ? "pass" : "fail") : "na",
+    auto: ema9Dist != null ? ema9Dist.toFixed(1) + "%" : null });
+  mand.push({ key: "adr", label: "ADR% > 3.5%", src: SRC.adr,
+    state: adr != null ? (adr > 3.5 ? "pass" : "fail") : "na",
+    auto: adr != null ? adr.toFixed(2) + "%" : null });
+
+  // 200-MA extension = WARNING (not a hard mandatory fail)
+  const extWarn = extPct != null && extLimit != null && extPct >= extLimit;
+  const extItem = { key: "ext", label: "200-MA 이격 < 3×ADR%", src: SRC.ext,
+    state: extPct != null && extLimit != null ? (extWarn ? "warn" : "pass") : "na",
+    auto: extPct != null ? extPct.toFixed(1) + "% / lim " + (extLimit != null ? extLimit.toFixed(1) + "%" : "—") : null,
+    warnOnly: true };
+
+  const mandFails = mand.filter(m => m.state === "fail");
+  const mandNA = mand.filter(m => m.state === "na");
+  const mandatoryPass = mandFails.length === 0;
+
+  // ── Triggers (F1-2): need ≥1
+  const TRIGS = [
+    { key: "comp", label: "D1 Compression Break", src: SRC.comp },
+    { key: "ath", label: "ATH (D1 사상 최고가)", src: SRC.ath },
+    { key: "event", label: "D1 Event (algo→S/R→SMA)", src: SRC.event },
+    { key: "ha", label: "HA Continuation (3rd FB)", src: SRC.ha },
+    { key: "vcp", label: "VCP / Cup&Handle (보조)", src: SRC.vcp, aux: true },
+  ];
+  const trigsOn = TRIGS.filter(t => s["t_" + t.key]);
+  const hasTrigger = trigsOn.length >= 1;
+
+  // ── Quality (F1-3): additive, interpretable points
+  let q = 0; const qChips = [];
+  // RVOL tiers
+  if (rvol != null) {
+    if (rvol >= 2.8) { q += 2; qChips.push({ t: "RVOL " + rvol.toFixed(1) + "× (+180% buzz)", c: "g" }); }
+    else if (rvol >= 1.2) { q += 1; qChips.push({ t: "RVOL " + rvol.toFixed(1) + "× (+20% buzz)", c: "g" }); }
+    else { qChips.push({ t: "RVOL " + rvol.toFixed(1) + "× <1.2", c: "r" }); }
+  }
+  // ADR% distribution benchmark
+  if (adr != null) {
+    if (adr >= 3) qChips.push({ t: "ADR% " + adr.toFixed(1) + " · Top100 상위 89%", c: "b" });
+    else if (adr >= 2) qChips.push({ t: "ADR% " + adr.toFixed(1) + " · Top100 상위 96%", c: "b" });
+  }
+  // Sector RS — F2 연동: 섹터가 연결되어 RS가 설정돼 있으면 자동 사용, 아니면 수동 폴백
+  const rsLinked = !!(linked && linked.rs && linked.rs !== "neutral");
+  const effRs = rsLinked ? linked.rs : s.q_rs;
+  if (effRs === "strong") { q += 1; qChips.push({ t: "섹터 RS 강함" + (rsLinked ? " (연동)" : ""), c: "g" }); }
+  else if (effRs === "weak") { qChips.push({ t: "섹터 RS 약함" + (rsLinked ? " (연동)" : ""), c: "r" }); }
+  // D1 Void > 1%
+  if (voidPct != null && voidPct > 1) { q += 1; qChips.push({ t: "D1 Void " + voidPct.toFixed(1) + "%", c: "g" }); }
+  // Tight base + volume contraction→surge
+  if (s.q_base) { q += 1; qChips.push({ t: "타이트 베이스 + 거래량 수축→돌파", c: "g" }); }
+
+  const qMax = 5;
+
+  // ── Grade resolution
+  let grade, lead;
+  if (!hasTrigger) {
+    grade = "C"; lead = "셋업 트리거 없음 — 진입 자격 미달";
+  } else if (!mandatoryPass) {
+    grade = q >= 2 ? "B" : "C";
+    lead = "필수 기준 미충족 — 등급 B로 캡(cap)";
+  } else {
+    if (q >= 5) grade = "Ap";
+    else if (q >= 3) grade = "A";
+    else if (q >= 1) grade = "Bp";
+    else grade = "B";
+    lead = "필수 통과 · 트리거 " + trigsOn.length + "개 · 품질 " + q + "/" + qMax;
+  }
+
+  // ── F2-3 정렬 신호 + 섹터 페널티
+  const ORDER = ["Ap", "A", "Bp", "B", "C"];
+  const marketBull = phase === "Confirmed Uptrend" || phase === "Uptrend Under Pressure";
+  let sectorPenalty = null;
+  // 시장은 상승인데 섹터가 50SMA 아래(붕괴) → 종목 등급 1단계 하향
+  if (linked && linked.trend === "down" && marketBull) {
+    grade = ORDER[Math.min(ORDER.indexOf(grade) + 1, ORDER.length - 1)];
+    sectorPenalty = { txt: "섹터 50SMA 아래(붕괴) + 시장 상승 → 등급 −1단계", c: "r" };
+  }
+  const sectorOverheat = linked ? isOverheated(linked) : false;
+
+  // 3단 신호등 상태 (g/a/r/n)
+  const marketState = phase === "Confirmed Uptrend" ? "g" : phase === "Downtrend" ? "r" : "a";
+  const sectorState = !linked ? "n" : linked.trend === "up" ? "g" : linked.trend === "pull" ? "a" : linked.trend === "down" ? "r" : "n";
+  const stockState = grade === "Ap" || grade === "A" ? "g" : grade === "C" ? "r" : "a";
+  const aligned = marketState === "g" && sectorState === "g" && stockState === "g";
+
+  // why-chips (multiplicative rationale, ties into F3 later)
+  const why = [];
+  why.push({ t: "필수 " + (mand.length - mandFails.length) + "/" + mand.length, c: mandatoryPass ? "g" : "r" });
+  why.push({ t: "트리거 " + trigsOn.length, c: hasTrigger ? "g" : "r" });
+  why.push({ t: "품질 " + q + "/" + qMax, c: q >= 3 ? "g" : q >= 1 ? "a" : "r" });
+  if (extWarn) why.push({ t: "⚠ 200-MA 과확장", c: "r" });
+  if (sectorPenalty) why.push({ t: "▼ 섹터 −1", c: "r" });
+  if (sectorOverheat) why.push({ t: "🔥 섹터 과열", c: "a" });
+
+  return { grade, lead, mand, extItem, mandFails, mandNA, mandatoryPass,
+           TRIGS, trigsOn, hasTrigger, qChips, q, qMax, why, extWarn,
+           phase, linked, marketBull, sectorPenalty, sectorOverheat,
+           marketState, sectorState, stockState, aligned, rsLinked };
+}
+
+const GRADE_LABEL = { Ap: "A+", A: "A", Bp: "B+", B: "B", C: "C" };
+
+/* ───────────────────────── 3-Stop Strategy engine (F1-4) ───────────────────────── */
+// Day0 3등분 스탑 → 합산 손실 -0.67R 캡. entry/stop 필수, ATR%는 트레일링용.
+function threeStop(s) {
+  const num = (v) => (v === "" || v == null || isNaN(parseFloat(v)) ? null : parseFloat(v));
+  const entry = num(s.entry) != null ? num(s.entry) : num(s.price);
+  const stop = num(s.stop);
+  const atr = num(s.atr);
+  if (entry == null || stop == null || !(entry > stop)) return { ok: false, entry, stop };
+  const risk = entry - stop;                 // 1R in price terms
+  const Rpct = risk / entry * 100;
+  const t2 = entry + 2 * risk;               // +2R target (33% 분할 익절)
+  const trail8 = atr != null ? entry * (1 + 8 * atr / 100) : null;
+  const trail10 = atr != null ? entry * (1 + 10 * atr / 100) : null;
+  // 3등분: 세 번째 진입분의 스탑을 본전 위로 끌어올려 합산 최악 손실을 -0.67R로 제한.
+  // 보수적 모델: tranche A,B는 -1R, tranche C는 본전(+0R) → 평균 (-1-1+0)/3 = -0.67R
+  const legs = [
+    { name: "A (1/3)", stopR: -1, note: "초기 스탑 유지" },
+    { name: "B (1/3)", stopR: -1, note: "초기 스탑 유지" },
+    { name: "C (1/3)", stopR: 0, note: "본전까지 스탑 상향" },
+  ];
+  const combinedR = legs.reduce((a, l) => a + l.stopR, 0) / 3; // -0.67
+  const maxPrice = Math.max(t2, trail10 || 0);
+  const minPrice = stop;
+  const pos = (p) => maxPrice > minPrice ? ((p - minPrice) / (maxPrice - minPrice)) * 100 : 0;
+  return { ok: true, entry, stop, risk, Rpct, t2, atr, trail8, trail10, legs, combinedR, pos };
+}
+
+/* ───────────────────────── Sector universe & signals (F2) ───────────────────────── */
+// US: SPDR 11섹터(cap) + Invesco 동일가중(EW) 1:1 매핑
+const US_SECTORS = [
+  { k: "XLK", ew: "RSPT", name: "기술" },
+  { k: "XLF", ew: "RSPF", name: "금융" },
+  { k: "XLE", ew: "RSPG", name: "에너지" },
+  { k: "XLV", ew: "RSPH", name: "헬스케어" },
+  { k: "XLI", ew: "RSPN", name: "산업재" },
+  { k: "XLY", ew: "RSPD", name: "경기소비재" },
+  { k: "XLP", ew: "RSPS", name: "필수소비재" },
+  { k: "XLU", ew: "RSPU", name: "유틸리티" },
+  { k: "XLB", ew: "RSPM", name: "소재" },
+  { k: "XLRE", ew: "RSPR", name: "부동산" },
+  { k: "XLC", ew: "RSPC", name: "커뮤니케이션" },
+];
+const KR_SECTORS = [
+  { k: "KR_SEMI", name: "반도체" }, { k: "KR_BATT", name: "2차전지" },
+  { k: "KR_DEF", name: "방산/조선" }, { k: "KR_BIO", name: "바이오" },
+  { k: "KR_NET", name: "인터넷" }, { k: "KR_AUTO", name: "자동차" },
+  { k: "KR_FIN", name: "금융" }, { k: "KR_ENT", name: "엔터/미디어" },
+];
+const SECTOR_META = [...US_SECTORS, ...KR_SECTORS];
+
+const TREND_META = {
+  up:      { lab: "건강", sub: "10/20EMA 위", c: "var(--green)", bg: "var(--green-bg)" },
+  pull:    { lab: "눌림목", sub: "EMA 아래·50SMA 위", c: "var(--amber)", bg: "var(--amber-bg)" },
+  down:    { lab: "붕괴", sub: "50SMA 아래", c: "var(--red)", bg: "var(--red-bg)" },
+  neutral: { lab: "—", sub: "미설정", c: "var(--text3)", bg: "var(--bg3)" },
+};
+const RS_META = { strong: { lab: "강", c: "var(--green)" }, neutral: { lab: "중", c: "var(--text3)" }, weak: { lab: "약", c: "var(--red)" } };
+const DEFAULT_SIG = { trend: "neutral", rs: "neutral", heat: "", vol: "" };
+const HEAT_LIMIT = 5; // 5×ATR% = 과열 임계 (Jeff Sun Ch16)
+
+function sectorScore(sig) {
+  let s = 0;
+  s += sig.trend === "up" ? 2 : sig.trend === "pull" ? 1 : sig.trend === "down" ? -3 : 0;
+  s += sig.rs === "strong" ? 2 : sig.rs === "weak" ? -1 : 0;
+  if (isOverheated(sig)) s -= 2;
+  return s;
+}
+function isOverheated(sig) { const h = parseFloat(sig.heat); return !isNaN(h) && h >= HEAT_LIMIT; }
+function sigIsSet(sig) { return sig.trend !== "neutral" || sig.rs !== "neutral" || sig.heat !== ""; }
+
+/* ───────────────────────── Shared state context ───────────────────────── */
+const Cockpit = createContext(null);
+
+/* ───────────────────────── Reusable bits ───────────────────────── */
+function Field({ label, src, children }) {
+  return (
+    <label className="field">
+      <span className="lab">{label}{src && <span className="dim" title={src}>ⓘ</span>}</span>
+      {children}
+    </label>
+  );
+}
+function Num({ v, set, ph }) {
+  return <input className="inp" inputMode="decimal" placeholder={ph || "—"} value={v}
+    onChange={e => set(e.target.value)} />;
+}
+function Check({ on, set, label, src, req, auto }) {
+  return (
+    <div className={"check" + (on ? " on" : "") + (req ? " req" : "")} onClick={() => set(!on)}>
+      <span className="box">{on ? "✓" : ""}</span>
+      <span style={{ flex: 1 }}>
+        <span className="txt">{label}</span>
+        {src && <span className="src">{src}</span>}
+      </span>
+      {auto && <span className={"auto " + auto.cls}>{auto.txt}</span>}
+    </div>
+  );
+}
+
+/* ───────────────────────── Tab 2 · Setup Scorer (F1 / M1) ───────────────────────── */
+const BLANK = {
+  ticker: "", market: "US",
+  price: "", vwap: "", ema9: "", adr: "", ma200: "", rvol: "", voidPct: "",
+  m_earn: false, m_trend: false, m_clean: false, m_index: false, m_vwap: false,
+  t_comp: false, t_ath: false, t_event: false, t_ha: false, t_vcp: false,
+  q_rs: "neutral", q_base: false,
+};
+
+function autoChip(state, txt) {
+  if (!txt) return null;
+  const cls = state === "pass" ? "pass" : state === "fail" ? "fail" : state === "warn" ? "warn" : "na";
+  return { cls, txt };
+}
+
+function ThreeStop({ price }) {
+  const { plan, updatePlan } = useContext(Cockpit);
+  const t = useMemo(() => threeStop({ ...plan, price }), [plan.entry, plan.stop, plan.atr, price]);
+  const up = (k) => (v) => updatePlan({ [k]: v });
+  const s = plan;
+  const f2 = (n) => n == null ? "—" : n.toFixed(2);
+  return (
+    <div className="card" style={{ borderColor: "var(--green)" }}>
+      <h2><span className="num">F1-4</span> 3-Stop Strategy
+        <a className="link" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600 }}
+           href="jeff_sun_complete_guide_v2.html#6">가이드 Ch6 ▸</a></h2>
+      <p className="dim" style={{ fontSize: 11.5, marginTop: -4, marginBottom: 10 }}>셋업 통과 시 자동 노출 · 진입가/손절가로 R 구조 계산</p>
+
+      <div className="grid3" style={{ marginBottom: 4 }}>
+        <Field label="진입가" src="기본=현재가"><Num v={s.entry} set={up("entry")} ph={price || "진입"} /></Field>
+        <Field label="손절가" src="Day0 초기 스탑"><Num v={s.stop} set={up("stop")} ph="stop" /></Field>
+        <Field label="ATR%" src="8~10× 트레일링용"><Num v={s.atr} set={up("atr")} ph="ATR%" /></Field>
+      </div>
+
+      {!t.ok ? (
+        <div className="bench" style={{ color: "var(--amber)" }}>진입가 &amp; 손절가 입력 필요 (손절가 &lt; 진입가)</div>
+      ) : (
+        <div>
+          {/* R metrics */}
+          <div className="row" style={{ marginBottom: 12 }}>
+            <span className="chip b">1R = {f2(t.risk)} ({t.Rpct.toFixed(2)}%)</span>
+            <span className="chip a">+2R 익절가 {f2(t.t2)}</span>
+            <span className="chip r">합산 최악 {t.combinedR.toFixed(2)}R</span>
+          </div>
+
+          {/* R-ladder */}
+          <div style={{ position: "relative", height: 56, margin: "18px 4px 26px" }}>
+            <div style={{ position: "absolute", top: 24, left: 0, right: 0, height: 4, borderRadius: 999,
+              background: "linear-gradient(90deg,var(--red) 0%,var(--text3) 33%,var(--green) 100%)" }} />
+            {[
+              { p: t.stop, lab: "-1R 스탑", c: "var(--red)" },
+              { p: t.entry, lab: "진입 0R", c: "var(--text)" },
+              { p: t.t2, lab: "+2R · 33%익절", c: "var(--green)" },
+              ...(t.trail8 != null ? [{ p: t.trail8, lab: "8×ATR", c: "var(--amber)" }] : []),
+              ...(t.trail10 != null ? [{ p: t.trail10, lab: "10×ATR 매도", c: "var(--amber)" }] : []),
+            ].map((m, i) => {
+              const left = Math.max(0, Math.min(100, t.pos(m.p)));
+              return (
+                <div key={i} style={{ position: "absolute", left: left + "%", top: 0, transform: "translateX(-50%)", textAlign: "center" }}>
+                  <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: m.c, whiteSpace: "nowrap" }}>{m.lab}</div>
+                  <div style={{ width: 2, height: 14, background: m.c, margin: "2px auto 0" }} />
+                  <div style={{ width: 9, height: 9, borderRadius: 9, background: m.c, margin: "2px auto 0", border: "2px solid var(--bg2)" }} />
+                  <div style={{ fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--text3)", marginTop: 2 }}>{f2(m.p)}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 3등분 스탑 legs */}
+          <div className="bench" style={{ marginBottom: 8, color: "var(--text2)" }}>Day 0 · 3등분 스탑 구조 (합산 손실 {t.combinedR.toFixed(2)}R 제한)</div>
+          <div className="grid3" style={{ marginBottom: 12 }}>
+            {t.legs.map((l, i) => (
+              <div key={i} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 9px" }}>
+                <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>{l.name}</div>
+                <div className="mono" style={{ fontSize: 11, color: l.stopR < 0 ? "var(--red)" : "var(--green)" }}>{l.stopR}R</div>
+                <div className="dim" style={{ fontSize: 10.5, marginTop: 2 }}>{l.note}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Day timeline */}
+          <ul className="miss" style={{ marginTop: 0 }}>
+            <li><span className="mk" style={{ color: "var(--blue)" }}>D0</span><span>3등분 진입 · 합산 손실 <b>−0.67R</b> 캡 (tranche C 스탑은 본전까지 상향)</span></li>
+            <li><span className="mk" style={{ color: "var(--blue)" }}>D0~2</span><span>+2R 초과 시 <b>33% 분할 익절</b> → 목표가 <b className="mono">{f2(t.t2)}</b></span></li>
+            <li><span className="mk" style={{ color: "var(--blue)" }}>D3</span><span>잔여 포지션 통합 · 10-MA 멘탈 스탑으로 전환</span></li>
+            <li><span className="mk w">⟂</span><span>10-MA <b>종가</b> 이탈 시 → 익일 ORL(Opening Range Low) 이탈 시 청산</span></li>
+            <li><span className="mk" style={{ color: "var(--amber)" }}>↗</span><span>8~10×ATR% 도달 시 트레일링/매도
+              {t.trail8 != null && <> → <b className="mono">{f2(t.trail8)}</b> ~ <b className="mono">{f2(t.trail10)}</b></>}</span></li>
+          </ul>
+          <div className="bench" style={{ marginTop: 8, color: "var(--text3)" }}>출처: {SRC.adr ? "Ch6 (15 하드룰·3-Stop) · Ch7 (8~10×ATR%, ORL)" : ""}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SetupScorer() {
+  const { setGrade, phase, activeSector, sigs, activeKey, setActiveKey, setBoardMarket } = useContext(Cockpit);
+  const [s, setS] = useState(BLANK);
+  const up = (k) => (v) => setS(p => ({ ...p, [k]: v }));
+
+  // F2-3 연동: 종목→섹터 = 공유 activeKey (보드/스코어러 단일 소스)
+  const secList = s.market === "US" ? US_SECTORS : KR_SECTORS;
+  const linkedKey = secList.some(x => x.k === activeKey) ? activeKey : "";
+  const linkedSig = linkedKey ? (sigs[linkedKey] || DEFAULT_SIG) : null;
+  const linkedMeta = linkedKey ? secList.find(x => x.k === linkedKey) : null;
+  const r = useMemo(() => scoreSetup(s, { phase, linked: linkedSig }), [s, phase, linkedSig]);
+
+  // push grade to shared state (read by Position Sizer in M5)
+  React.useEffect(() => { setGrade(r.grade); }, [r.grade]);
+
+  return (
+    <div>
+      {/* identity + numeric inputs */}
+      <div className="card">
+        <h2><span className="num">F1</span> 종목 & 지표 입력</h2>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <div style={{ flex: 1 }}>
+            <Field label="티커"><input className="inp" placeholder="TICKER" value={s.ticker}
+              onChange={e => up("ticker")(e.target.value.toUpperCase())} /></Field>
+          </div>
+          <div>
+            <span className="lab" style={{ fontSize: 11, color: "var(--text2)", display: "block", marginBottom: 4 }}>시장</span>
+            <div className="seg">
+              <button className={s.market === "US" ? "on" : ""} onClick={() => up("market")("US")}>US</button>
+              <button className={s.market === "KR" ? "on" : ""} onClick={() => up("market")("KR")}>KR</button>
+            </div>
+          </div>
+        </div>
+        <div className="grid2">
+          <Field label="현재가" src="Price"><Num v={s.price} set={up("price")} /></Field>
+          <Field label="VWAP" src={SRC.vwap}><Num v={s.vwap} set={up("vwap")} /></Field>
+          <Field label="D9 EMA" src={SRC.ema9}><Num v={s.ema9} set={up("ema9")} /></Field>
+          <Field label="ADR%" src={SRC.adr}><Num v={s.adr} set={up("adr")} ph="3.5" /></Field>
+          <Field label="200-MA" src={SRC.ext}><Num v={s.ma200} set={up("ma200")} /></Field>
+          <Field label="RVOL (배수)" src={SRC.rvol}><Num v={s.rvol} set={up("rvol")} ph="1.2" /></Field>
+          <Field label="D1 Void %" src={SRC.void}><Num v={s.voidPct} set={up("voidPct")} ph="1.0" /></Field>
+        </div>
+        <Field label="소속 섹터 (F2 연동 · 보드와 공유)" src={SRC.rs}>
+          <select className="inp" value={linkedKey}
+            onChange={e => { const v = e.target.value; setActiveKey(v || null); if (v) setBoardMarket(v.startsWith("KR_") ? "KR" : "US"); }}>
+            <option value="">(미지정 — 보드에서 선택)</option>
+            {secList.map(x => <option key={x.k} value={x.k}>{(s.market === "US" ? x.k + " · " : "") + x.name}</option>)}
+          </select>
+        </Field>
+        <p className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+          수치 입력 시 필수 항목이 자동 판정됩니다. 값이 없으면 수동 체크로 폴백. 섹터 연동 시 RS·정렬·과열이 등급/사이징에 반영됩니다.
+        </p>
+      </div>
+
+      {/* Mandatory */}
+      <div className="card">
+        <h2><span className="num">F1-1</span> 필수 기준 <span className="dim" style={{ textTransform: "none", fontWeight: 400 }}>· 하나라도 미충족 → 등급 B 캡</span></h2>
+        {r.mand.map(m => {
+          const computed = m.state === "pass" || m.state === "fail" || m.state === "warn";
+          // numeric-driven mandatory items show auto chip & are read-only; manual ones are checkboxes
+          const manualKey = { earn: "m_earn", trend: "m_trend", clean: "m_clean", index: "m_index" }[m.key];
+          if (manualKey) {
+            return <Check key={m.key} req on={s[manualKey]} set={up(manualKey)} label={m.label} src={m.src}
+              auto={autoChip(s[manualKey] ? "pass" : "fail", s[manualKey] ? "OK" : "미충족")} />;
+          }
+          return (
+            <div key={m.key} className="check" style={{ cursor: "default" }}>
+              <span className="box" style={{ background: m.state === "pass" ? "var(--green)" : m.state === "fail" ? "var(--red)" : "transparent",
+                borderColor: m.state === "pass" ? "var(--green)" : m.state === "fail" ? "var(--red)" : "var(--text3)" }}>
+                {m.state === "pass" ? "✓" : m.state === "fail" ? "✕" : ""}</span>
+              <span style={{ flex: 1 }}>
+                <span className="txt">{m.label}</span>
+                <span className="src">{m.src}</span>
+              </span>
+              {m.auto && <span className={"auto " + (m.state === "pass" ? "pass" : m.state === "fail" ? "fail" : "na")}>{m.auto}</span>}
+            </div>
+          );
+        })}
+        {/* 200-MA extension warning */}
+        <div className="check" style={{ cursor: "default" }}>
+          <span className="box" style={{ background: r.extItem.state === "warn" ? "var(--amber)" : "transparent",
+            borderColor: r.extItem.state === "warn" ? "var(--amber)" : r.extItem.state === "pass" ? "var(--green)" : "var(--text3)" }}>
+            {r.extItem.state === "warn" ? "!" : r.extItem.state === "pass" ? "✓" : ""}</span>
+          <span style={{ flex: 1 }}>
+            <span className="txt">{r.extItem.label} <span className="dim">(경고만, 캡 아님)</span></span>
+            <span className="src">{r.extItem.src}</span>
+          </span>
+          {r.extItem.auto && <span className={"auto " + (r.extItem.state === "warn" ? "warn" : r.extItem.state === "pass" ? "pass" : "na")}>{r.extItem.auto}</span>}
+        </div>
+      </div>
+
+      {/* Triggers */}
+      <div className="card">
+        <h2><span className="num">F1-2</span> 셋업 트리거 <span className="dim" style={{ textTransform: "none", fontWeight: 400 }}>· 최소 1개 필요</span></h2>
+        {r.TRIGS.map(t => (
+          <Check key={t.key} on={s["t_" + t.key]} set={up("t_" + t.key)} label={t.label} src={t.src} />
+        ))}
+      </div>
+
+      {/* Quality */}
+      <div className="card">
+        <h2><span className="num">F1-3</span> 품질 가산점 <span className="dim" style={{ textTransform: "none", fontWeight: 400 }}>· 등급 상향</span></h2>
+        <Field label="섹터 대비 RS (D1 5일)" src={SRC.rs}>
+          {r.rsLinked ? (
+            <div className="chip g" style={{ fontSize: 12 }}>
+              {RS_META[linkedSig.rs].lab === "강" ? "강함 (+1)" : "약함"} · {linkedMeta ? linkedMeta.name : ""} 자동 연동
+              <span className="dim" style={{ marginLeft: 6 }}>보드 값 사용</span>
+            </div>
+          ) : (
+            <div className="seg">
+              <button className={s.q_rs === "strong" ? "on" : ""} onClick={() => up("q_rs")("strong")}>강함 +1</button>
+              <button className={s.q_rs === "neutral" ? "on" : ""} onClick={() => up("q_rs")("neutral")}>중립</button>
+              <button className={s.q_rs === "weak" ? "on" : ""} onClick={() => up("q_rs")("weak")}>약함</button>
+            </div>
+          )}
+        </Field>
+        <Check on={s.q_base} set={up("q_base")} label="타이트 베이스 + 거래량 수축→돌파 급증 (+1)" src={SRC.base} />
+        <div className="bench" style={{ marginTop: 8 }}>
+          가산 자동 반영: RVOL ≥1.2×(+1) / ≥2.8×(+2) · D1 Void &gt;1%(+1)
+          <br />벤치마크 (Top100 winner): {SRC.adrdist}
+        </div>
+      </div>
+
+      {/* Grade output */}
+      <div className="card" style={{ borderColor: r.grade === "C" ? "var(--red)" : r.mandatoryPass && r.hasTrigger ? "var(--green)" : "var(--amber)" }}>
+        <h2><span className="num">F1-5</span> 등급 판정</h2>
+        <div className="gradewrap">
+          <div className={"badge " + r.grade}>{GRADE_LABEL[r.grade]}</div>
+          <div className="gradeinfo">
+            <div className="lead">{r.lead}</div>
+            <div className="why">{r.why.map((w, i) => <span key={i} className={"chip " + w.c}>{w.t}</span>)}</div>
+            <div className="meter"><span style={{ width: (r.q / r.qMax * 100) + "%" }} /></div>
+            {r.qChips.length > 0 && <div className="why" style={{ marginTop: 8 }}>
+              {r.qChips.map((c, i) => <span key={i} className={"chip " + c.c}>{c.t}</span>)}
+            </div>}
+          </div>
+        </div>
+
+        {(r.mandFails.length > 0 || !r.hasTrigger || r.mandNA.length > 0 || r.extWarn || r.sectorPenalty || r.sectorOverheat) && (
+          <ul className="miss">
+            {r.mandFails.map(m => <li key={m.key}><span className="mk">✕</span><span>필수 미충족 — {m.label}<br/><span className="dim">{m.src}</span></span></li>)}
+            {!r.hasTrigger && <li><span className="mk">✕</span><span>셋업 트리거 0개 — 최소 1개 선택 필요<br/><span className="dim">{SRC.comp}</span></span></li>}
+            {r.sectorPenalty && <li><span className="mk">▼</span><span>{r.sectorPenalty.txt}<br/><span className="dim">F2-3 정렬 페널티</span></span></li>}
+            {r.sectorOverheat && <li><span className="mk w">🔥</span><span>섹터 ATR% 과열 — 신규 롱 사이징 페널티 (탭3 F3)<br/><span className="dim">Ch16 · 섹터 과매수</span></span></li>}
+            {r.extWarn && <li><span className="mk w">!</span><span>200-MA에서 3×ADR% 이상 과확장 — 추격 주의<br/><span className="dim">{SRC.ext}</span></span></li>}
+            {r.mandNA.map(m => <li key={m.key}><span className="mk w">?</span><span>판정 보류 (입력 필요) — {m.label}</span></li>)}
+          </ul>
+        )}
+
+        <details className="acc">
+          <summary>채점 로직 보기 (블랙박스 0건 원칙)</summary>
+          <div className="bench" style={{ marginTop: 8, lineHeight: 1.7 }}>
+            1. 트리거 0개 → <b>C</b> (진입 자격 미달)<br/>
+            2. 필수 미충족 1+ → 등급 <b>B로 캡</b> (품질≥2면 B, 아니면 C)<br/>
+            3. 필수 통과 + 트리거 1+ → 품질점수로 상향:<br/>
+            &nbsp;&nbsp;품질 5 → <b>A+</b> · 3~4 → <b>A</b> · 1~2 → <b>B+</b> · 0 → <b>B</b>
+          </div>
+        </details>
+
+        <div className="bench" style={{ marginTop: 10, color: "var(--text3)" }}>
+          공유 상태로 전달됨 → 시장국면 <b className="mono" style={{ color: "var(--text2)" }}>{phase}</b> · 섹터 <b className="mono" style={{ color: "var(--text2)" }}>{activeSector.name}{activeSector.rs && activeSector.rs !== "neutral" ? " · RS " + RS_META[activeSector.rs].lab : ""}</b> · 등급 <b className="mono" style={{ color: "var(--amber)" }}>{GRADE_LABEL[r.grade]}</b> (탭3 사이징에서 사용)
+        </div>
+      </div>
+
+      {/* F2-3 Alignment signal */}
+      <div className="card" style={{ borderColor: r.aligned ? "var(--green)" : "var(--border)" }}>
+        <h2><span className="num">F2-3</span> 정렬 신호 <span className="dim" style={{ textTransform: "none", fontWeight: 400 }}>· 시장 → 섹터 → 종목</span></h2>
+        <div className="lamps">
+          {[
+            { st: r.marketState, t: "시장", s: PHASE_KR[phase] || phase },
+            { st: r.sectorState, t: "섹터", s: linkedMeta ? (linkedMeta.name + (r.sectorOverheat ? " 🔥" : "")) : "미연동" },
+            { st: r.stockState, t: "종목", s: "등급 " + GRADE_LABEL[r.grade] },
+          ].map((L, i) => (
+            <div key={i} className="lamp">
+              <div className={"lampdot lamp" + L.st}>{L.st === "g" ? "✓" : L.st === "r" ? "✕" : L.st === "a" ? "!" : "—"}</div>
+              <div className="lt">{L.t}</div>
+              <div className="ls">{L.s}</div>
+            </div>
+          ))}
+        </div>
+        <div className="bench" style={{ marginTop: 10, textAlign: "center",
+          color: r.aligned ? "var(--green)" : "var(--text2)" }}>
+          {r.aligned ? "✅ 3단 정렬 — 시장·섹터·종목 모두 정렬됨"
+            : !linkedMeta ? "섹터 미연동 — 입력 카드에서 소속 섹터를 선택하면 정렬·과열이 반영됩니다"
+            : r.sectorPenalty ? "⚠ 시장 상승 + 섹터 붕괴 → 종목 등급 −1단계 적용됨"
+            : r.sectorOverheat ? "🔥 섹터 과열 — 등급은 유지, 사이징(탭3)에서 −페널티"
+            : "부분 정렬 — 위 신호등 참고"}
+        </div>
+      </div>
+
+      {r.mandatoryPass && r.hasTrigger ? (
+        <ThreeStop price={s.price} />
+      ) : (
+        <div className="card" style={{ background: "var(--bg)", borderStyle: "dashed" }}>
+          <div className="dim" style={{ fontSize: 12 }}>
+            🔒 <b>3-Stop Strategy</b> 패널은 셋업 통과 시 자동 노출됩니다 (필수 전부 + 트리거 1개 이상).
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────────────── Placeholders (M3~M5) ───────────────────────── */
+function Placeholder({ icon, title, ms, lines }) {
+  return (
+    <div className="card">
+      <div className="placeholder">
+        <div className="big">{icon}</div>
+        <div style={{ fontWeight: 700, color: "var(--text2)", fontSize: 15 }}>{title}</div>
+        <div style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.7 }}>{lines.map((l, i) => <div key={i}>{l}</div>)}</div>
+        <div className="ms">{ms}</div>
+      </div>
+    </div>
+  );
+}
+
+const PHASE_KR = {
+  "Confirmed Uptrend": "확정 상승장", "Uptrend Under Pressure": "상승 압박(눌림)",
+  "Rally Attempt": "반등 시도", "Downtrend": "하락장",
+};
+
+function SectorCell({ s, label, sig, selected, onClick }) {
+  const tm = TREND_META[sig.trend];
+  const h = parseFloat(sig.heat);
+  const heatPct = !isNaN(h) ? Math.min(h / (HEAT_LIMIT + 1) * 100, 100) : 0;
+  const heatColor = !isNaN(h) ? (h >= HEAT_LIMIT ? "var(--red)" : h >= HEAT_LIMIT * 0.8 ? "var(--amber)" : "var(--green)") : "transparent";
+  return (
+    <button className={"cell" + (selected ? " sel" : "")} onClick={onClick}
+      style={{ background: tm.bg, borderColor: sig.trend === "neutral" ? "var(--border)" : tm.c }}>
+      <div className="sym" style={{ color: tm.c }}>{label}</div>
+      <div className="nm">{s.name}</div>
+      {sig.rs !== "neutral" && <span className="rsbadge" style={{ background: RS_META[sig.rs].c }}>{RS_META[sig.rs].lab}</span>}
+      <div className="heatbar">
+        <span style={{ width: heatPct + "%", background: heatColor }} />
+        <span className="dl" style={{ left: (HEAT_LIMIT / (HEAT_LIMIT + 1) * 100) + "%" }} />
+      </div>
+      {isOverheated(sig) && <span className="oh">🔥</span>}
+    </button>
+  );
+}
+
+function MarketSector() {
+  const { phase, setPhase, boardMarket, setBoardMarket, weighting, setWeighting,
+          sigs, updateSig, activeKey, setActiveKey } = useContext(Cockpit);
+  const list = boardMarket === "US" ? US_SECTORS : KR_SECTORS;
+  const labelOf = (s) => boardMarket === "US" ? (weighting === "ew" && s.ew ? s.ew : s.k) : s.k.replace("KR_", "");
+  const sigOf = (k) => sigs[k] || DEFAULT_SIG;
+
+  const withSig = list.map(s => ({ s, sig: sigOf(s.k) })).filter(x => sigIsSet(x.sig));
+  const ranked = [...withSig].sort((a, b) => sectorScore(b.sig) - sectorScore(a.sig));
+  const top = ranked.filter(x => sectorScore(x.sig) > 0).slice(0, 5);
+  const broken = withSig.filter(x => x.sig.trend === "down");
+  const overheated = withSig.filter(x => isOverheated(x.sig));
+
+  const activeMeta = list.find(s => s.k === activeKey);
+  const aSig = activeKey ? sigOf(activeKey) : null;
+  const patch = (p) => updateSig(activeKey, p);
+
+  return (
+    <div>
+      {/* Market phase */}
+      <div className="card">
+        <h2><span className="num">F2</span> 시장 국면 <span className="dim" style={{ textTransform: "none", fontWeight: 400 }}>· Minervini MDM</span></h2>
+        <div className="phasegrid">
+          {PHASES.map(p => (
+            <button key={p} className={"phasebtn" + (phase === p ? " on" : "")} onClick={() => setPhase(p)}>
+              {PHASE_KR[p]}<small>{p}</small>
+            </button>
+          ))}
+        </div>
+        <div className="bench" style={{ marginTop: 8, color: "var(--text3)" }}>탭3 사이징의 베이스 R을 결정 (확정 상승장↑ ~ 하락장 보류)</div>
+      </div>
+
+      {/* Sector heatmap */}
+      <div className="card">
+        <h2 style={{ marginBottom: 8 }}>
+          <span className="num">F2-1</span> 섹터 히트맵
+          <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            <span className="seg">
+              <button className={boardMarket === "US" ? "on" : ""} onClick={() => { setBoardMarket("US"); setActiveKey(null); }}>US</button>
+              <button className={boardMarket === "KR" ? "on" : ""} onClick={() => { setBoardMarket("KR"); setActiveKey(null); }}>KR</button>
+            </span>
+            {boardMarket === "US" && <span className="seg">
+              <button className={weighting === "cap" ? "on" : ""} onClick={() => setWeighting("cap")}>시총</button>
+              <button className={weighting === "ew" ? "on" : ""} onClick={() => setWeighting("ew")}>동일가중</button>
+            </span>}
+          </span>
+        </h2>
+        <div className="heatgrid">
+          {list.map(s => (
+            <SectorCell key={s.k} s={s} label={labelOf(s)} sig={sigOf(s.k)}
+              selected={activeKey === s.k} onClick={() => setActiveKey(activeKey === s.k ? null : s.k)} />
+          ))}
+        </div>
+        <div className="bench" style={{ marginTop: 10, color: "var(--text3)" }}>
+          색=추세(50SMA) · 우상단 배지=RS · 하단 바=ATR% 과열(점선 {HEAT_LIMIT}× 임계, 🔥=초과). 셀 탭 → 시그널 편집
+        </div>
+      </div>
+
+      {/* Editor for selected sector */}
+      {activeKey && aSig && (
+        <div className="card" style={{ borderColor: "var(--amber)" }}>
+          <h2><span className="num">F2-2</span> {labelOf(activeMeta)} · {activeMeta.name} 시그널</h2>
+          <Field label="추세 (50SMA / 10·20EMA 위치)">
+            <div className="seg" style={{ display: "flex", flexWrap: "wrap" }}>
+              {["up", "pull", "down", "neutral"].map(t => (
+                <button key={t} className={aSig.trend === t ? "on" : ""} onClick={() => patch({ trend: t })}>{TREND_META[t].lab}</button>
+              ))}
+            </div>
+            <div className="dim" style={{ fontSize: 10.5, marginTop: 4 }}>{TREND_META[aSig.trend].sub}</div>
+          </Field>
+          <Field label="섹터 RS (시장 대비 5/20일)">
+            <div className="seg">
+              {["strong", "neutral", "weak"].map(rv => (
+                <button key={rv} className={aSig.rs === rv ? "on" : ""} onClick={() => patch({ rs: rv })}>{RS_META[rv].lab}</button>
+              ))}
+            </div>
+          </Field>
+          <div className="grid2">
+            <Field label={"ATR% 이격 (×ATR%, " + HEAT_LIMIT + "× 과열)"} src={SRC.adr ? "Ch16 · 섹터 과매수" : ""}>
+              <Num v={aSig.heat} set={(v) => patch({ heat: v })} ph={"< " + HEAT_LIMIT} />
+            </Field>
+            <Field label="Volume Buzz % (선택)"><Num v={aSig.vol} set={(v) => patch({ vol: v })} ph="자금 유입" /></Field>
+          </div>
+          {isOverheated(aSig) && <div className="chip r" style={{ marginTop: 4 }}>🔥 {aSig.heat}×ATR% — 과열, 신규 롱 추가 조심 (탭3 사이징 페널티)</div>}
+          <div className="row" style={{ marginTop: 12 }}>
+            <span className="chip g">✓ 종목 분석/사이징에 적용됨 (공유 상태)</span>
+            <button className="phasepill" onClick={() => setActiveKey(null)}>선택 해제</button>
+          </div>
+        </div>
+      )}
+
+      {/* Sorted lists (F2-4) */}
+      <div className="card">
+        <h2><span className="num">F2-4</span> 테마 정렬</h2>
+        {withSig.length === 0 ? (
+          <div className="bench" style={{ color: "var(--text3)" }}>섹터 시그널을 입력하면 상위 테마/붕괴 섹터가 자동 정렬됩니다.</div>
+        ) : (
+          <div>
+            <div className="bench" style={{ color: "var(--green)", marginBottom: 6 }}>▲ 상위 테마 (강세)</div>
+            {top.length ? top.map(x => (
+              <div key={x.s.k} className="check" style={{ cursor: "pointer", padding: "6px" }} onClick={() => setActiveKey(x.s.k)}>
+                <span className="box" style={{ background: TREND_META[x.sig.trend].c, borderColor: TREND_META[x.sig.trend].c, fontSize: 10 }}>{sectorScore(x.sig)}</span>
+                <span className="txt">{labelOf(x.s)} <span className="dim">{x.s.name}</span></span>
+                <span className="auto pass" style={{ marginLeft: "auto" }}>{TREND_META[x.sig.trend].lab} · RS {RS_META[x.sig.rs].lab}{isOverheated(x.sig) ? " · 🔥" : ""}</span>
+              </div>
+            )) : <div className="bench dim">강세 섹터 없음</div>}
+
+            <div className="bench" style={{ color: "var(--red)", margin: "10px 0 6px" }}>▼ 붕괴 섹터 (50SMA 아래)</div>
+            {broken.length ? broken.map(x => (
+              <div key={x.s.k} className="check" style={{ cursor: "pointer", padding: "6px" }} onClick={() => setActiveKey(x.s.k)}>
+                <span className="box" style={{ background: "var(--red)", borderColor: "var(--red)" }}>✕</span>
+                <span className="txt">{labelOf(x.s)} <span className="dim">{x.s.name}</span></span>
+                <span className="auto fail" style={{ marginLeft: "auto" }}>붕괴 · RS {RS_META[x.sig.rs].lab}</span>
+              </div>
+            )) : <div className="bench dim">붕괴 섹터 없음</div>}
+
+            {overheated.length > 0 && <div className="bench" style={{ color: "var(--amber)", marginTop: 10 }}>
+              🔥 과열({HEAT_LIMIT}×ATR%+): {overheated.map(x => labelOf(x.s)).join(", ")}
+            </div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+/* ───────────────────────── Dynamic sizing engine (F3) ───────────────────────── */
+const GRADE_MULT = { Ap: 1.0, A: 0.8, Bp: 0.65, B: 0.5, C: 0 };
+const PHASE_BASE = {
+  "Confirmed Uptrend":      { lo: 0.75, hi: 1.25, mid: 1.0, label: "강한 상승장" },
+  "Rally Attempt":          { lo: 0.5,  hi: 1.0,  mid: 0.75, label: "상승 시도" },
+  "Uptrend Under Pressure": { lo: 0.25, hi: 0.5,  mid: 0.4, label: "상승 압박" },
+  "Downtrend":              { lo: 0,    hi: 0,    mid: 0,   label: "하락장 (보류)" },
+};
+const HEAT_CAP_SOFT = 8, HEAT_CAP_HARD = 10; // 포트폴리오 히트 캡 6~10%
+const R_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.25];
+
+function sectorMult(linked) {
+  if (!linked || linked.name === "미선택") return { m: 0.8, why: "섹터 미연동" };
+  if (linked.trend === "down") return { m: 0.5, why: "섹터 50SMA 아래" };
+  if (linked.rs === "strong") return { m: 1.0, why: "섹터 RS 강함" };
+  if (linked.rs === "weak") return { m: 0.65, why: "섹터 RS 약함" };
+  return { m: 0.8, why: "섹터 중립" };
+}
+
+function sizeIt(inp) {
+  const num = (v) => (v === "" || v == null || isNaN(parseFloat(v)) ? null : parseFloat(v));
+  const { phase, grade, linked, eventNear } = inp;
+  const account = num(inp.account), riskPct = num(inp.riskPct), entry = num(inp.entry), stop = num(inp.stop), atr = num(inp.atr);
+  const base = PHASE_BASE[phase] || PHASE_BASE["Confirmed Uptrend"];
+  const gradeMult = GRADE_MULT[grade] != null ? GRADE_MULT[grade] : 0;
+  const sm = sectorMult(linked);
+  const overheat = !!(linked && isOverheated(linked));
+  const overheatMult = overheat ? 0.5 : 1;
+  let stopATR = null, stopMult = 1;
+  if (entry != null && stop != null && atr != null && entry > stop && atr > 0) {
+    stopATR = (entry - stop) / (entry * atr / 100);
+    if (stopATR >= 3.5) stopMult = 0.7; else if (stopATR >= 2.5) stopMult = 0.85;
+  }
+  const eventMult = eventNear ? 0.5 : 1;
+  const rawR = base.mid * gradeMult * sm.m * overheatMult * stopMult * eventMult;
+  const finalR = Math.max(0, Math.min(rawR, base.hi));
+
+  let riskUnit = null, actualRisk = null, perShare = null, shares = null, position = null, posPct = null, maxLoss = null;
+  const ready = account != null && riskPct != null && entry != null && stop != null && entry > stop && finalR > 0;
+  if (ready) {
+    riskUnit = account * riskPct / 100;     // 1R in money
+    actualRisk = riskUnit * finalR;
+    perShare = entry - stop;
+    shares = Math.floor(actualRisk / perShare);
+    position = shares * entry;
+    posPct = account > 0 ? position / account * 100 : 0;
+    maxLoss = shares * perShare;
+  }
+  const blocked = grade === "C" ? "C등급 — 신규 진입 보류" : base.mid === 0 ? "하락장 — 신규 진입 보류 / 현금" : null;
+
+  const why = [
+    { t: base.label + " (base " + base.mid + "R)", c: "b" },
+    { t: "등급 " + (GRADE_LABEL[grade] || grade) + " ×" + gradeMult, c: gradeMult >= 0.8 ? "g" : gradeMult > 0 ? "a" : "r" },
+    { t: sm.why + " ×" + sm.m, c: sm.m >= 1 ? "g" : sm.m >= 0.8 ? "a" : "r" },
+  ];
+  if (overheat) why.push({ t: "🔥 과열 ×0.5", c: "r" });
+  if (stopMult < 1) why.push({ t: "넓은 스탑 " + stopATR.toFixed(1) + "×ATR ×" + stopMult, c: "a" });
+  if (eventNear) why.push({ t: "이벤트 임박 ×0.5", c: "r" });
+
+  return { base, gradeMult, sm, overheat, stopATR, stopMult, eventMult, finalR, rawR,
+           riskUnit, actualRisk, perShare, shares, position, posPct, maxLoss, ready, blocked, why,
+           account, entry, riskPct };
+}
+
+function PositionSizer() {
+  const { phase, activeSector, grade, plan, updatePlan } = useContext(Cockpit);
+  const [ccy, setCcy] = useState("USD");
+  const [account, setAccount] = useState("");
+  const [riskPct, setRiskPct] = useState("1.0");
+  const [rate, setRate] = useState("1380");
+  const [openHeat, setOpenHeat] = useState("");
+  const [eventNear, setEventNear] = useState(false);
+
+  const sLabel = activeSector.name + (activeSector.rs && activeSector.rs !== "neutral" ? " · RS " + RS_META[activeSector.rs].lab : "") + (isOverheated(activeSector) ? " · 🔥" : "");
+  const z = useMemo(() => sizeIt({ phase, grade, linked: activeSector, eventNear, account, riskPct, entry: plan.entry, stop: plan.stop, atr: plan.atr }),
+    [phase, grade, activeSector, eventNear, account, riskPct, plan.entry, plan.stop, plan.atr]);
+
+  const rateN = parseFloat(rate) || 0;
+  const other = ccy === "USD" ? "KRW" : "USD";
+  const conv = (v) => v == null || !rateN ? null : (ccy === "USD" ? v * rateN : v / rateN);
+  const fmt = (v, c = ccy) => v == null ? "—" : (c === "KRW" ? "₩" + Math.round(v).toLocaleString() : "$" + v.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+  const fmtBoth = (v) => v == null ? "—" : fmt(v) + " · " + fmt(conv(v), other);
+
+  const recOpt = R_OPTIONS.reduce((b, o) => Math.abs(o - z.finalR) < Math.abs(b - z.finalR) ? o : b, R_OPTIONS[0]);
+  const calcAt = (R) => !z.ready ? null : (() => { const sh = Math.floor(z.riskUnit * R / z.perShare); return { sh, pos: sh * z.entry, loss: sh * z.perShare, pct: z.account > 0 ? sh * z.entry / z.account * 100 : 0 }; })();
+
+  // portfolio heat
+  const thisRisk = (parseFloat(riskPct) || 0) * z.finalR;
+  const openN = parseFloat(openHeat) || 0;
+  const totalHeat = openN + thisRisk;
+  const heatState = totalHeat > HEAT_CAP_HARD ? "r" : totalHeat > HEAT_CAP_SOFT ? "a" : "g";
+
+  // split / pyramiding
+  const half = z.shares != null ? Math.floor(z.shares / 2) : null;
+  const third = z.shares != null ? Math.floor(z.shares / 3) : null;
+  const pyramidPrice = z.ready ? z.entry + z.perShare : null;
+
+  return (
+    <div>
+      {/* shared state */}
+      <div className="card">
+        <h2><span className="num">F3</span> 동적 사이징 <span className="dim" style={{ textTransform: "none", fontWeight: 400 }}>· 공유 상태 결합</span></h2>
+        <div className="row">
+          <span className="chip b">시장: {PHASE_KR[phase] || phase}</span>
+          <span className="chip a">섹터: {sLabel}</span>
+          <span className="chip g">등급: {GRADE_LABEL[grade] || grade}</span>
+        </div>
+      </div>
+
+      {/* inputs */}
+      <div className="card">
+        <h2><span className="num">F3-1</span> 계좌 & 트레이드 플랜</h2>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <div>
+            <span className="lab" style={{ fontSize: 11, color: "var(--text2)", display: "block", marginBottom: 4 }}>통화</span>
+            <div className="seg">
+              <button className={ccy === "USD" ? "on" : ""} onClick={() => setCcy("USD")}>USD</button>
+              <button className={ccy === "KRW" ? "on" : ""} onClick={() => setCcy("KRW")}>KRW</button>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <Field label={"환율 (USD/KRW)"}><Num v={rate} set={setRate} ph="1380" /></Field>
+          </div>
+        </div>
+        <div className="grid2">
+          <Field label={"계좌 자산 (" + ccy + ")"}><Num v={account} set={setAccount} ph="계좌" /></Field>
+          <Field label="1R 기준 리스크 %" src="1R = 계좌의 N%"><Num v={riskPct} set={setRiskPct} ph="1.0" /></Field>
+          <Field label="진입가 (공유)" src="Scorer 3-Stop과 공유"><Num v={plan.entry} set={(v) => updatePlan({ entry: v })} ph="진입" /></Field>
+          <Field label="손절가 (공유)"><Num v={plan.stop} set={(v) => updatePlan({ stop: v })} ph="stop" /></Field>
+          <Field label="ATR% (공유)" src="넓은 스탑 감지"><Num v={plan.atr} set={(v) => updatePlan({ atr: v })} ph="ATR%" /></Field>
+          <Field label="현재 오픈 합산 리스크 %" src="히트 캡 계산"><Num v={openHeat} set={setOpenHeat} ph="0" /></Field>
+        </div>
+        <Check on={eventNear} set={setEventNear} label="이벤트(어닝/FOMC) 임박 — 사이즈 축소 (×0.5)" src="갭락 대비" />
+      </div>
+
+      {/* recommendation */}
+      <div className="card" style={{ borderColor: z.blocked ? "var(--red)" : z.ready ? "var(--green)" : "var(--amber)" }}>
+        <h2><span className="num">F3-2</span> 추천 R</h2>
+        {z.blocked ? (
+          <div className="chip r" style={{ fontSize: 13 }}>⛔ {z.blocked}</div>
+        ) : (
+          <div>
+            <div className="gradewrap">
+              <div className="badge" style={{ color: "var(--amber)", borderColor: "var(--amber)", background: "var(--amber-bg)", fontSize: 30 }}>
+                {z.finalR.toFixed(2)}<span style={{ fontSize: 14 }}>R</span>
+              </div>
+              <div className="gradeinfo">
+                <div className="lead">권장 범위 {z.base.lo}~{z.base.hi}R 내</div>
+                <div className="why">{z.why.map((w, i) => <span key={i} className={"chip " + w.c}>{w.t}</span>)}</div>
+                <div className="bench" style={{ marginTop: 8, color: "var(--text3)" }}>
+                  곱셈 근거: {z.base.mid} × {z.gradeMult} × {z.sm.m}{z.overheat ? " × 0.5" : ""}{z.stopMult < 1 ? " × " + z.stopMult : ""}{z.eventMult < 1 ? " × 0.5" : ""} = {z.rawR.toFixed(3)} → clamp {z.finalR.toFixed(2)}
+                </div>
+              </div>
+            </div>
+            {!z.ready && <div className="bench" style={{ marginTop: 10, color: "var(--amber)" }}>계좌 자산 · 진입가 · 손절가를 입력하면 수량/손실이 계산됩니다.</div>}
+            {z.ready && (
+              <div className="grid2" style={{ marginTop: 14 }}>
+                <div style={{ background: "var(--bg)", borderRadius: 8, padding: 10 }}>
+                  <div className="dim" style={{ fontSize: 10.5 }}>매수 수량</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 700 }}>{z.shares.toLocaleString()} 주</div>
+                </div>
+                <div style={{ background: "var(--bg)", borderRadius: 8, padding: 10 }}>
+                  <div className="dim" style={{ fontSize: 10.5 }}>자산 대비 비중</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 700 }}>{z.posPct.toFixed(1)}%</div>
+                </div>
+                <div style={{ background: "var(--bg)", borderRadius: 8, padding: 10 }}>
+                  <div className="dim" style={{ fontSize: 10.5 }}>포지션 금액</div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 700 }}>{fmtBoth(z.position)}</div>
+                </div>
+                <div style={{ background: "var(--bg)", borderRadius: 8, padding: 10 }}>
+                  <div className="dim" style={{ fontSize: 10.5 }}>최대 손실 ({z.finalR.toFixed(2)}R)</div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--red)" }}>{fmtBoth(z.maxLoss)}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* options comparison */}
+      {z.ready && !z.blocked && (
+        <div className="card">
+          <h2><span className="num">F3-3</span> R 옵션 비교</h2>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--mono)", fontSize: 12 }}>
+              <thead><tr style={{ color: "var(--text3)", fontSize: 10.5 }}>
+                {["R", "수량", "포지션", "최대손실", "비중"].map(h => <th key={h} style={{ textAlign: "right", padding: "4px 6px", borderBottom: "1px solid var(--border)" }}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {R_OPTIONS.map(R => { const c = calcAt(R); const rec = R === recOpt;
+                  return (
+                    <tr key={R} style={{ background: rec ? "var(--amber-bg)" : "transparent" }}>
+                      <td style={{ padding: "5px 6px", color: rec ? "var(--amber)" : "var(--text)", fontWeight: rec ? 700 : 400 }}>{R}R {rec && "★"}</td>
+                      <td style={{ textAlign: "right", padding: "5px 6px" }}>{c.sh.toLocaleString()}</td>
+                      <td style={{ textAlign: "right", padding: "5px 6px" }}>{fmt(c.pos)}</td>
+                      <td style={{ textAlign: "right", padding: "5px 6px", color: "var(--red)" }}>{fmt(c.loss)}</td>
+                      <td style={{ textAlign: "right", padding: "5px 6px" }}>{c.pct.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="bench" style={{ marginTop: 8, color: "var(--text3)" }}>★ = 추천 R({z.finalR.toFixed(2)})에 가장 가까운 옵션 · 구루: Minervini 0.5~1R · Qullamaggie 0.25~0.5R · O'Neil 7~8% 손절</div>
+        </div>
+      )}
+
+      {/* split entry + pyramiding */}
+      {z.ready && !z.blocked && z.shares > 0 && (
+        <div className="card">
+          <h2><span className="num">F3-3</span> 분할 진입 · 피라미딩</h2>
+          <ul className="miss" style={{ marginTop: 0 }}>
+            <li><span className="mk" style={{ color: "var(--blue)" }}>½</span><span>2분할: 1차 <b className="mono">{half}</b>주 진입 @ <b className="mono">{z.entry}</b> · 2차 <b className="mono">{z.shares - half}</b>주 (눌림/돌파 확인)</span></li>
+            <li><span className="mk" style={{ color: "var(--blue)" }}>⅓</span><span>3분할: 회당 <b className="mono">{third}</b>주 스케일 인</span></li>
+            <li><span className="mk" style={{ color: "var(--green)" }}>↑</span><span>피라미딩: <b className="mono">+1R ({pyramidPrice.toFixed(2)})</b> 도달 시 추가 (스탑 본전 상향 후)</span></li>
+          </ul>
+        </div>
+      )}
+
+      {/* portfolio heat cap */}
+      <div className="card" style={{ borderColor: heatState === "r" ? "var(--red)" : heatState === "a" ? "var(--amber)" : "var(--border)" }}>
+        <h2><span className="num">F3-3</span> 포트폴리오 히트 캡</h2>
+        <div className="row" style={{ marginBottom: 8 }}>
+          <span className="chip b">이번 트레이드 {thisRisk.toFixed(2)}%</span>
+          <span className="chip">오픈 {openN.toFixed(1)}%</span>
+          <span className={"chip " + heatState}>합산 {totalHeat.toFixed(2)}% / 한도 {HEAT_CAP_HARD}%</span>
+        </div>
+        <div className="meter"><span style={{ width: Math.min(totalHeat / HEAT_CAP_HARD * 100, 100) + "%",
+          background: heatState === "r" ? "var(--red)" : heatState === "a" ? "var(--amber)" : "var(--green)" }} /></div>
+        <div className="bench" style={{ marginTop: 8, color: heatState === "r" ? "var(--red)" : "var(--text3)" }}>
+          {heatState === "r" ? "⛔ 히트 캡 초과 — 사이즈 축소 또는 진입 보류 (잔여 가용 " + Math.max(0, HEAT_CAP_HARD - openN).toFixed(1) + "%)"
+            : heatState === "a" ? "⚠ 소프트 캡(" + HEAT_CAP_SOFT + "%) 초과 — 신규 진입 신중"
+            : "잔여 가용 리스크 " + Math.max(0, HEAT_CAP_HARD - totalHeat).toFixed(1) + "% (전체 오픈 6~10% 권장)"}
+        </div>
+      </div>
+
+      <div className="bench" style={{ color: "var(--text3)", padding: "0 4px 4px" }}>
+        ⚠ Cockpit은 신호기입니다. 모든 추천은 근거를 노출하며 최종 결정·집행은 본인 책임입니다 (자동 주문 아님).
+      </div>
+    </div>
+  );
+}
+function Reference() {
+  return (
+    <div className="card">
+      <h2>Jeff Sun Reference</h2>
+      <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
+        가이드 v2(<span className="mono">jeff_sun_complete_guide_v2.html</span>) 챕터 딥링크. 파일을 같은 폴더에 두면 연결됩니다.
+      </p>
+      <ul className="miss" style={{ marginTop: 0 }}>
+        {[["Ch2","인디케이터·Top100 통계 (ADR%/ATR%/RVOL)"],
+          ["Ch4~5","Screening→Focus List, Top-Down (필수·트리거)"],
+          ["Ch6","15 하드룰 · 3-Stop · −0.67R"],
+          ["Ch7","황금 규칙 (8~10×ATR%, ORL 매도)"],
+          ["Ch16","FAQ · 섹터 과매수 (ATR% 이격도)"]].map(([c, t]) =>
+          <li key={c}><span className="mk" style={{ color: "var(--blue)" }}>#</span>
+            <span><a className="link" href={"jeff_sun_complete_guide_v2.html#" + c.replace(/[^0-9]/g, "")}>{c}</a> — {t}</span></li>)}
+      </ul>
+    </div>
+  );
+}
+
+/* ───────────────────────── App shell ───────────────────────── */
+const PHASES = ["Confirmed Uptrend", "Uptrend Under Pressure", "Rally Attempt", "Downtrend"];
+
+function App() {
+  const [active, setActive] = useState("scorer");
+  const [phase, setPhase] = useState("Confirmed Uptrend");
+  const [grade, setGrade] = useState("C");
+  // sector board state (lifted so it persists across tabs)
+  const [boardMarket, setBoardMarket] = useState("US");
+  const [weighting, setWeighting] = useState("cap");
+  const [sigs, setSigs] = useState({});
+  const [activeKey, setActiveKey] = useState(null);
+  const updateSig = (k, p) => setSigs(prev => ({ ...prev, [k]: { ...DEFAULT_SIG, ...prev[k], ...p } }));
+  // shared trade plan (entry/stop/atr) — used by Scorer 3-Stop & Position Sizer
+  const [plan, setPlan] = useState({ entry: "", stop: "", atr: "" });
+  const updatePlan = (p) => setPlan(prev => ({ ...prev, ...p }));
+
+  const activeSector = useMemo(() => {
+    if (!activeKey) return { name: "미선택", trend: "neutral", rs: "neutral", heat: "" };
+    const meta = SECTOR_META.find(x => x.k === activeKey);
+    const sig = sigs[activeKey] || DEFAULT_SIG;
+    const sym = meta ? (boardMarket === "US" && weighting === "ew" && meta.ew ? meta.ew : meta.k.replace("KR_", "")) : activeKey;
+    return { key: activeKey, name: (meta ? meta.name : activeKey), sym, ...sig };
+  }, [activeKey, sigs, weighting, boardMarket]);
+
+  const cyclePhase = () => setPhase(p => PHASES[(PHASES.indexOf(p) + 1) % PHASES.length]);
+
+  const TABS = [
+    { k: "board", ic: "🗺️", t: "Market" },
+    { k: "scorer", ic: "🎯", t: "Scorer" },
+    { k: "sizer", ic: "📐", t: "Sizer" },
+    { k: "ref", ic: "📖", t: "Reference" },
+  ];
+
+  return (
+    <Cockpit.Provider value={{ phase, setPhase, grade, setGrade,
+      boardMarket, setBoardMarket, weighting, setWeighting, sigs, updateSig, activeKey, setActiveKey, activeSector,
+      plan, updatePlan }}>
+      <div className="container">
+        <div className="topbar">
+          <div className="brand">TF COCKPIT<span className="dot">·</span>v2<br/><small>JEFF SUN · CFTe</small></div>
+          <button className="phasepill" onClick={cyclePhase} title="탭하여 시장 국면 전환 (공유 상태)">
+            시장 <b>{phase}</b> ▸
+          </button>
+        </div>
+
+        {active === "board" && <MarketSector />}
+        {active === "scorer" && <SetupScorer />}
+        {active === "sizer" && <PositionSizer />}
+        {active === "ref" && <Reference />}
+      </div>
+
+      <nav className="tabs">
+        {TABS.map(t => (
+          <button key={t.k} className={"tab" + (active === t.k ? " active" : "")} onClick={() => setActive(t.k)}>
+            <span className="ic">{t.ic}</span>{t.t}
+          </button>
+        ))}
+      </nav>
+    </Cockpit.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
